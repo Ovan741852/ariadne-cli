@@ -79,8 +79,31 @@ export async function runUpdateFile(
       return true;
     }
 
-    const fileNameKey = path.parse(rel).name;
     const relpos = rel.split(path.sep).join('/');
+
+    if (purpose === ARIADNE_DEFAULT_CLI_PURPOSE) {
+      const withoutJSDoc: string[] = [];
+      for (const it of items) {
+        if (!pickJSDocDescription(it.localNodes).trim()) {
+          withoutJSDoc.push(it.name);
+        }
+      }
+      if (withoutJSDoc.length > 0) {
+        const sym = withoutJSDoc.map((n) => `\`${n}\``).join(', ');
+        console.error(
+          [
+            `❌ ariadne update: cannot write registry — JSDoc is missing on: ${sym},`,
+            `   and you did not pass a CLI <purpose> (2nd arg). The registry would only get “${ARIADNE_REGISTRY_EMPTY_PURPOSE}” otherwise.`,
+            `   Fix: add a /** … */ block with a first-line description on each export, or run:`,
+            `   ariadne update "${relpos}" "1–3 sentence English Purpose"`,
+            `   (one string applies to every local export in this file).`,
+          ].join('\n')
+        );
+        return false;
+      }
+    }
+
+    const fileNameKey = path.parse(rel).name;
 
     for (const it of items) {
       const { name, type, codeSignature, localNodes } = it;
@@ -143,10 +166,15 @@ Renders best when the signature alone (e.g. a large inline props type) is ambigu
  */
 export async function updateRegistry(
   filepath: string,
-  purpose: string = ARIADNE_DEFAULT_CLI_PURPOSE
+  purpose?: string
 ) {
   const cwd = process.cwd();
-  const ok = await runUpdateFile(cwd, filepath, purpose, { checkConfig: true });
+  const trimmed = purpose?.trim() ?? '';
+  const effectivePurpose =
+    trimmed === '' ? ARIADNE_DEFAULT_CLI_PURPOSE : trimmed;
+  const ok = await runUpdateFile(cwd, filepath, effectivePurpose, {
+    checkConfig: true,
+  });
   if (ok === false) {
     process.exit(1);
   }

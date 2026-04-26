@@ -11,6 +11,9 @@ import {
 
 const SUPPORTED_IDE = new Set<string>(['cursor']);
 
+/**
+ * Options for `initProject`: target IDE and non-interactive `-y` mode.
+ */
 export type InitOptions = {
   ide: string;
   /** 不詢問 config，直接寫入內建 include/exclude */
@@ -76,6 +79,9 @@ async function promptForNewConfigInteractive(): Promise<string> {
   }
 }
 
+/**
+ * Scaffolds `.ariadne`, registry dir, `.cursor` rules, hooks, and the ariadne-registry skill.
+ */
 export async function initProject(options: InitOptions) {
   const ide = normalizeIde(options.ide);
   if (!SUPPORTED_IDE.has(ide)) {

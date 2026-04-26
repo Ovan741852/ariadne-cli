@@ -30,14 +30,14 @@ Ariadne is designed so the registry is often **incomplete or placeholder-heavy**
 1. **Read** the changed source and any existing `.ariadne/registry/*_<Symbol>.md` for that file.
 2. **Author** a 1–3 sentence English **Purpose** (or add JSDoc on the export in source, then let the CLI pick it up).
 3. From the **project root**, run:
-   - `npx @koncrate/ariadne-cli update "<relative-or-absolute-path-to-.ts>"`  
-   - Or with an explicit purpose: `npx @koncrate/ariadne-cli update "<path>" "<Purpose text>"`  
-   - If `ariadne` is on PATH: `ariadne update "<path>"` (same args).
+   - `npx @koncrate/ariadne-cli update "<path-to-.ts>"` **only if** every local export in that file already has a JSDoc description; otherwise the CLI **exits with an error** and lists which symbols need JSDoc **or** you pass one purpose for the whole file:  
+   - `npx @koncrate/ariadne-cli update "<path>" "1–3 sentence English Purpose"` (same text **every** export in that file).  
+   - If `ariadne` is on PATH, same: `ariadne update "<path>"` (JSDoc everywhere) or `ariadne update "<path>" "…"`.
 4. **When the user asks to refresh the registry repo-wide, clear stale rows, or “update everything”** — use this **fixed script** from the **project root** (teams can require agents to follow it verbatim):
    1. Run: `npx @koncrate/ariadne-cli audit --files --stale` (add `--issues` if you also want **missing** registry or **placeholder** Purpose rows in the worklist: filters **union** with `--stale`).
    2. For **each** path printed (one per line, no markdown), **`read`** the source `.ts`/`.tsx` and the matching `.ariadne/registry/*_<Symbol>.md` for that file.
    3. Re-understand changed exports, fix **Purpose** and/or **JSDoc** as needed.
-   4. Run **once per file**: `npx @koncrate/ariadne-cli update "<relative-or-absolute-path>"` (or `ariadne update "<path>"` if on PATH) so all exports and `source_fingerprint` for that file are written.
+   4. Run **once per file** after the file has **JSDoc on every export** (or one shared CLI Purpose): `npx @koncrate/ariadne-cli update "<path>"` or `npx @koncrate/ariadne-cli update "<path>" "Whole-file Purpose"`. A bare `update` with no JSDoc and no second **fails**; fix the file first.
    5. Optionally run a full `ariadne audit` again to confirm no rows remain that you care about.
 
    Same with global install: `ariadne audit --files --stale` → per-file `read` → per-file `ariadne update "<path>"`. **`audit` never writes** `.md`; only **`update`** does.
@@ -45,6 +45,7 @@ Ariadne is designed so the registry is often **incomplete or placeholder-heavy**
 ## Do not
 
 - Expect **`ariadne audit`** alone to update the registry: it only **lists**; you still need **`update`** per source file to write **Purpose** and `source_fingerprint`.
+- Run **`update "<path>"`** (no second argument) when **any** export in that file still lacks JSDoc—the command will **fail** on purpose. Add JSDoc to each symbol **or** pass `update "<path>" "shared Purpose"`.
 - Paste full function bodies into the registry; **Code Signature** is contract-only. Source remains truth.
 
 ## Project rules

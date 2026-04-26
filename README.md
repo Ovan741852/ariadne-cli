@@ -108,10 +108,10 @@ ariadne audit --json --issues
 將指定 **TypeScript 檔**中**可註冊的匯出**（僅本檔內有主體的宣告；見上方）寫入註冊表，並寫入 **`source_fingerprint`**（與你給的 Purpose / JSDoc 一起落地）。**這才是**源碼變動或補敘事後、要讓 registry 與真實程式對齊時**應跑的唯一寫入指令**。路徑為相對目前工作目錄，**且**須在 `config` 的允許範圍內。
 
 ```bash
-ariadne update <檔案路徑> "[可選：用途說明]"
+ariadne update <檔案路徑> "[可選：整檔共用的 English Purpose，套用到本檔所有匯出]"
 ```
 
-若未提供用途，會盡量採用**該匯出**上第一則 JSDoc；沒有 JSDoc 則顯示佔位說明。
+**沒有第二參數時**：**本檔每一個**可註冊匯出都**必須**有 JSDoc 第一行描述，否則 **CLI 會失敗**（非 0 退出）並列出缺文檔的符號名，提醒你要加 `/** … */` 或改下 `ariadne update "<路徑>" "…"`. 有第二參數時，該字串作為**整檔**的 Purpose（每個匯出同一敘事），**不需**每個匯出都有 JSDoc（仍建議在穩定 API 上寫 JSDoc）。
 
 **範例：**
 
@@ -126,7 +126,7 @@ ariadne update src/core/combat.ts "實體傷害結算與死亡判定"
 
 **與 hook 有無無關**：專案內 **`.cursor/rules/ariadne.mdc`** 已寫明——只要修改了在 `include` 範圍內、可註冊的匯出，**不論** Cursor 是否**支援** hooks、是否**關閉** `postToolUse`、是否在 **Tab / Chat / CI**，Agent 都**必須**撰寫 **Purpose**（或 **JSDoc**）並執行 `ariadne update`；**不能**因沒有 hook 提醒就略過註冊。
 
-- Hook **不會**在背景幫你跑 `ariadne`；它會在對話中注入一段 **`additional_context`（英文）**，要求 **Agent 在同一或下一回應**：（1）**重新讀**剛寫入的 `.ts`/`.tsx`；（2）依專案內 **`.cursor/rules/ariadne.mdc`** 的內容契約寫出 **1～3 句 English Purpose**；（3）再執行 `ariadne update "<相對路徑>" "…"` 或只跑 `update` 讓 JSDoc 生效。  
+- Hook **不會**在背景幫你跑 `ariadne`；它會在對話中注入一段 **`additional_context`（英文）**，要求 **Agent 在同一或下一回應**：（1）**重新讀**剛寫入的 `.ts`/`.tsx`；（2）依 **`.cursor/rules/ariadne.mdc`** 在源碼補 **JSDoc**（每個匯出至少一則描述）**或**準備整檔共用的 **English Purpose**；（3）執行 `ariadne update "<相對路徑>"`（**僅在**本檔每匯出都有 JSDoc 時）**或** `ariadne update "<相對路徑>" "<Purpose>"`。**兩邊都沒補**（沒有第二參數且任一回出缺 JSDoc）時 **`update` 會非 0 失敗**——見 §4 說明。  
 - 預設腳本只需 **`node`（**hook 內不呼叫 `npx`/`ariadne`）；**實際執行 `update`** 仍由 Agent 用專案內 CLI 或全域/ `npx`。  
 - 你**本來**就有 `.cursor/hooks.json` 時 init 不會覆寫；要手動把 `postToolUse` 的一筆掛上：  
   `node .cursor/hooks/ariadne-post-tool-use.cjs`  

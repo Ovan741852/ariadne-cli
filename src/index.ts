@@ -28,7 +28,9 @@ program
 
 program
   .command('update <filepath> [purpose]')
-  .description('解析指定檔案並更新至註冊表（路徑須符合 .ariadne/config.json）')
+  .description(
+    'Update registry for one file (path must match config). Without [purpose], every export in the file must have JSDoc, or the command errors.'
+  )
   .action(updateRegistry);
 
 program
