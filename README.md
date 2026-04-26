@@ -2,9 +2,9 @@
 
 在專案裡建立**可機讀的語意註冊與 Schema 索引**，讓 Cursor 等工具能照著既有邏輯與 API 約束開發，減少憑空杜撰的實作路徑。
 
-- 以 **TypeScript AST**（[ts-morph](https://github.com/dsherret/ts-morph)）擷取已匯出函式的簽名與 JSDoc  
+- 以 **TypeScript AST**（[ts-morph](https://github.com/dsherret/ts-morph)）依 `getExportedDeclarations` 盡量涵蓋**本檔內的具名匯出**（函式、類別、`const`／`let` 變數、型別、介面、列舉、`namespace`、以及具名 / `* as` 的 **re-export**；**不**為單純 `export * from '...'` 的每個外層符號各產一檔；**不**涵蓋 `export =` 等 CommonJS 風格）  
 - 將 `update` 時可選的**用途說明**寫入註冊內容  
-- 產出 **RAG 友善**的 Markdown 置於 `.ariadne/registry/`，搭配 `.cursor/rules/ariadne.mdc` 讓代理能檢索本機脈絡  
+- 產出 **RAG 友善**的 Markdown 置於 `.ariadne/registry/`，搭配 **`.cursor/rules/ariadne.mdc`**（內容契約）與 **`.cursor/skills/ariadne-registry/SKILL.md`**（Agent 技能：何時/如何 `update`）讓代理能檢索並維護脈絡  
 
 **套件名稱**：[npm 上的 `@koncrate/ariadne-cli`](https://www.npmjs.com/package/@koncrate/ariadne-cli)（指令仍為 `ariadne`）。
 
@@ -58,9 +58,10 @@ ariadne init -y --sync
 | `.ariadne/config.json` | 專案註冊**規範**（可更新哪些路徑／要排除什麼），見下方 |
 | `.ariadne/registry/` | 語意索引（`update` 產出檔案所在目錄） |
 | `.cursor/rules/ariadne.mdc` | Cursor 規則樣板，引導代理讀寫註冊表（僅 `--ide cursor`） |
+| `.cursor/skills/ariadne-registry/SKILL.md` | [Cursor Agent Skill](https://cursor.com/docs)（專案內），描述何時/如何執行 `ariadne update`／`audit` 維護 registry；**若已存在則不覆寫** |
 | `.cursor/hooks.json` 與 `.cursor/hooks/ariadne-post-tool-use.cjs` | 選用。由 **init** 部署：在 [Cursor Hooks](https://cursor.com/docs/hooks) 的 **`postToolUse`** 向 **Agent 對話** 注入 `additional_context`，提醒閱讀剛寫入的檔並產生 Purpose 再跑 `update`（見下節） |
 
-`init` 已存在 `config.json` 時不會覆寫，避免洗掉你的調整。
+`init` 已存在 `config.json` 時不會覆寫，避免洗掉你的調整。已存在的 **`hooks.json` / `hooks/ariadne-*.cjs` / `skills/.../SKILL.md`** 亦**不覆寫**（可手動合併新行為）。
 
 #### Registry 內容方針（英文、單一真相）
 
@@ -93,7 +94,7 @@ ariadne sync
 
 #### 讓 Agent **一次**做全專案檢查（非 `sync`）
 
-CLI **不會幫你叫 LLM**，但 `ariadne audit` 會掃你 `config` 裡涵蓋的**每一個** `export` 函式，比對 **registry 有沒有檔、Purpose 是否還是佔位**（`No JSDoc summary`），最後在終端產生一段**可整段貼到 Cursor** 的英文任務說明。
+CLI **不會幫你叫 LLM**，但 `ariadne audit` 會掃你 `config` 裡涵蓋的**每一個**可註冊的 `export` 符號，比對 **registry 有沒有檔、Purpose 是否還是佔位**（`No JSDoc summary`），最後在終端產生一段**可整段貼到 Cursor** 的英文任務說明。
 
 ```bash
 ariadne audit
@@ -105,13 +106,13 @@ ariadne audit --json
 
 ### 4. 單檔註冊 `ariadne update`
 
-將指定 **TypeScript 檔**中**已匯出（`export`）的函式**寫入註冊表。路徑為相對目前工作目錄，**且**須在 `config` 的允許範圍內。
+將指定 **TypeScript 檔**中**可註冊的匯出**（本檔內有主體的匯出 + 具名 re-export；見上方說明）寫入註冊表。路徑為相對目前工作目錄，**且**須在 `config` 的允許範圍內。
 
 ```bash
 ariadne update <檔案路徑> "[可選：用途說明]"
 ```
 
-若未提供用途，會盡量採用函式第一則 JSDoc；沒有 JSDoc 則顯示佔位說明。
+若未提供用途，會盡量採用**該匯出**上第一則 JSDoc；沒有 JSDoc 則顯示佔位說明。
 
 **範例：**
 
@@ -144,13 +145,13 @@ ariadne update src/core/combat.ts "實體傷害結算與死亡判定"
 
 ## 技術要點
 
-1. **靜態萃取**：讀入 TS 檔，掃描 `export` 的函式宣告。  
+1. **靜態萃取**：讀入 TS 檔，掃描可註冊的 `export` 符號（實作見 `exportRegistry`）。  
 2. **語意合併**：CLI 的 `[用途說明]` 與 JSDoc 說明一併反映在產出 Markdown 的 *Purpose* 一節。  
-3. **產出格式**：每支匯出函式一檔；front matter 含 `id` / `type` / `source` / `error_codes` / `dependencies`；本體除 **Purpose** 與 **Code Signature**（不貼函式本體）外，還有 **Contract (import / name / value domain)** 與 **error codes & reasons** 骨架（多為 `n/a`），讓團隊補 **import/呼叫方式、名稱、值域、錯因**，比只看簽名更精準；仍以源碼為單一真相。
+3. **產出格式**：**一個匯出符號一檔**（`fileKey_${safeName}.md`；re-export 亦一符號一檔）；`type` 欄位標示 `Function` / `Class` / `Variable` / `TypeAlias` / `Interface` / `Enum` / `Namespace` / `ReExport` / `DefaultExport` / `Expression` 等；本體除 **Purpose** 與 **Code Signature** 外，還有 **Contract** 與 **error codes & reasons** 骨架；仍以源碼為單一真相。
 
 ## 產出範例
 
-*Purpose* 併入你傳入的用途、JSDoc 或預設佔位；*Code Signature* 為**不含函式內實作區塊**的宣告／簽名（`ts-morph` 產生）。
+*Purpose* 併入你傳入的用途、JSDoc 或預設佔位；*Code Signature* 為**不含內實作區塊**的宣告／可讀之簽名片段（依符號類型裁切，見 `getHeadSignatureForExport`）。
 
 ~~~text
 ---

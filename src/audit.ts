@@ -4,6 +4,11 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import { loadAriadneConfig } from './config';
 import { ARIADNE_REGISTRY_EMPTY_PURPOSE } from './update';
+import {
+  listRegistryExportItems,
+  pickJSDocDescription,
+  safeRegistryFileName,
+} from './exportRegistry';
 
 export type AuditOptions = {
   /** JSON line per row to stdout (for scripts) */
@@ -20,7 +25,8 @@ type Row = {
 };
 
 /**
- * Compare every export under config globs with `.ariadne/registry` entries
+ * Compare every resolvable `export` (see `listRegistryExportItems`) under config
+ * globs with `.ariadne/registry` entries
  * and print a report + a block the user can paste to an agent for one-shot review.
  */
 export async function runAudit(
@@ -48,20 +54,16 @@ export async function runAudit(
     } catch {
       continue;
     }
-    const functions = sourceFile
-      .getFunctions()
-      .filter((f) => f.isExported() && f.getName() != null);
+    const exportables = listRegistryExportItems(sourceFile);
 
     const fileNameKey = path.parse(rel).name;
 
-    for (const fn of functions) {
-      const name = fn.getName()!;
-      const hasJSDoc = Boolean(
-        fn.getJsDocs()[0]?.getDescription().trim()
-      );
+    for (const ex of exportables) {
+      const { name, localNodes } = ex;
+      const hasJSDoc = Boolean(pickJSDocDescription(localNodes));
       const regFile = path.join(
         registryDir,
-        `${fileNameKey}_${name}.md`
+        `${fileNameKey}_${safeRegistryFileName(name)}.md`
       );
       const registryExists = fs.existsSync(regFile);
       let purposeLooksEmpty = true;

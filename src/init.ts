@@ -94,6 +94,11 @@ export async function initProject(options: InitOptions) {
   const cursorDir = path.join(cwd, '.cursor');
   const cursorRulesDir = path.join(cursorDir, 'rules');
   const cursorHooksDir = path.join(cursorDir, 'hooks');
+  const cursorSkillDir = path.join(
+    cursorDir,
+    'skills',
+    'ariadne-registry'
+  );
   const skipPrompt = options.yes || process.env.CI === 'true' || process.env.CI === '1';
 
   try {
@@ -101,6 +106,7 @@ export async function initProject(options: InitOptions) {
     await fs.ensureDir(registryDir);
     await fs.ensureDir(cursorRulesDir);
     await fs.ensureDir(cursorHooksDir);
+    await fs.ensureDir(cursorSkillDir);
 
     if (!(await fs.pathExists(configPath))) {
       let body: string;
@@ -166,6 +172,29 @@ export async function initProject(options: InitOptions) {
       }
     } else {
       console.error('❌ 找不到範本:', hooksJsonFrom);
+    }
+
+    const skillFrom = path.join(
+      __dirname,
+      'cursor',
+      'skills',
+      'ariadne-registry',
+      'SKILL.md'
+    );
+    const skillTo = path.join(cursorSkillDir, 'SKILL.md');
+    if (await fs.pathExists(skillFrom)) {
+      if (!(await fs.pathExists(skillTo))) {
+        await fs.copyFile(skillFrom, skillTo);
+        console.log(
+          '✅ 已安裝 Cursor Agent skill: .cursor/skills/ariadne-registry/SKILL.md（觸發時知道要跑 ariadne update 維護 registry）'
+        );
+      } else {
+        console.log(
+          'ℹ️ 已存在 .cursor/skills/ariadne-registry/SKILL.md，已略過覆寫。'
+        );
+      }
+    } else {
+      console.error('❌ 找不到 skill 範本:', skillFrom);
     }
 
     if (options.sync) {

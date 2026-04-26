@@ -1,5 +1,4 @@
 import { Project } from 'ts-morph';
-import type { FunctionDeclaration } from 'ts-morph';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import {
@@ -7,23 +6,23 @@ import {
   toProjectRelative,
   isPathAllowedByConfig,
 } from './config';
+import {
+  listRegistryExportItems,
+  pickJSDocDescription,
+  contractHints,
+  safeRegistryFileName,
+  type RegistryExportTypeTag,
+} from './exportRegistry';
+
+export type { RegistryExportTypeTag };
+
+/** @deprecated use listRegistryExportItems in ./exportRegistry */
+export { listRegistryExportItems as listExportableFunctionOrClass } from './exportRegistry';
 
 /** When the user did not pass `[purpose]`, we prefer JSDoc; this string is the internal sentinel. */
 export const ARIADNE_DEFAULT_CLI_PURPOSE = '(cli purpose not provided)';
 /** Shown in generated `.md` when an export has no JSDoc; `audit` matches this to flag work. */
 export const ARIADNE_REGISTRY_EMPTY_PURPOSE = 'No JSDoc summary.';
-
-function getSignatureContractText(fn: FunctionDeclaration): string {
-  const body = fn.getBody();
-  const fileText = fn.getSourceFile().getFullText();
-  if (body) {
-    return fileText
-      .slice(fn.getStart(), body.getStart())
-      .replace(/\s+$/, '')
-      .trimEnd();
-  }
-  return fn.getText().trim();
-}
 
 export type RunUpdateOptions = {
   /** 單檔 update 時做規範校驗；sync 已以 glob 篩過則關掉 */
@@ -70,29 +69,32 @@ export async function runUpdateFile(
   try {
     const project = new Project();
     const sourceFile = project.addSourceFileAtPath(abs);
-    const functions = sourceFile
-      .getFunctions()
-      .filter((f) => f.isExported() && f.getName() != null);
+    const items = listRegistryExportItems(sourceFile);
 
-    if (functions.length === 0) {
-      console.log(`⚠️ 在 ${rel} 中沒有找到匯出函式（export function）。`);
+    if (items.length === 0) {
+      console.log(
+        `⚠️ 在 ${rel} 中沒有可註冊的具名匯出。已略過純 \`export * from '...'\`（不為每個外層符號產一檔）；\`export =\` 等格式亦未支援。`
+      );
       return true;
     }
 
     const fileNameKey = path.parse(rel).name;
     const relpos = rel.split(path.sep).join('/');
 
-    for (const func of functions) {
-      const name = func.getName()!;
+    for (const it of items) {
+      const { name, type, codeSignature, localNodes } = it;
+      const js = pickJSDocDescription(localNodes);
       const jsDoc =
-        func.getJsDocs()[0]?.getDescription().trim() ||
-        ARIADNE_REGISTRY_EMPTY_PURPOSE;
-      const contractHead = getSignatureContractText(func);
+        js || ARIADNE_REGISTRY_EMPTY_PURPOSE;
       const purposeBody =
         purpose !== ARIADNE_DEFAULT_CLI_PURPOSE ? purpose : jsDoc;
+      const { importHint, inputHint, outputHint } = contractHints(type, name);
+      const typeTag: RegistryExportTypeTag = type;
+
+      const safeFile = safeRegistryFileName(name);
       const mdContent = `---
-id: "${fileNameKey}.${name}"
-type: "Function"
+id: "${fileNameKey}.${name.replace(/"/g, '\\"')}"
+type: "${typeTag}"
 source: "${relpos.replace(/"/g, '\\"')}"
 error_codes: "n/a"
 dependencies: "n/a"
@@ -107,22 +109,22 @@ ${purposeBody}
 
 ## Code Signature (contract, not full body)
 \`\`\`typescript
-${contractHead}
+${codeSignature}
 \`\`\`
 
 ## Contract (import / name / value domain)
 Renders best when the signature alone (e.g. a large inline props type) is ambiguous. Flesh out for consumers: **how to import or call**, **name**, **input bounds**, **output / return domain**.
 
-- **How to import or call (pattern):** n/a *— e.g. \`import { ${name} } from '...'\` or the intended usage shape; default vs named.*
+- **How to import or call (pattern):** n/a *— ${importHint}*
 - **Exported symbol:** \`${name}\`
-- **Input value domain (types, allowed set, invariants):** n/a *— props/args, numeric ranges, unions, "must be" rules.*
-- **Output / return value domain:** n/a *— return type, rendered subtree contract, or side-effect summary.*
+- **Input value domain (types, allowed set, invariants):** n/a *— ${inputHint}*
+- **Output / return value domain:** n/a *— ${outputHint}*
 
 ## error codes & reasons
 - n/a *— when stable, list \`code\` or category → **reason** (and align short codes in YAML \`error_codes\` above, if you replace \`"n/a"\` there).*
 `;
 
-      const outPath = path.join(registryDir, `${fileNameKey}_${name}.md`);
+      const outPath = path.join(registryDir, `${fileNameKey}_${safeFile}.md`);
       await fs.writeFile(outPath, mdContent);
       console.log(`✅ 已註冊: ${name} -> ${outPath}`);
     }

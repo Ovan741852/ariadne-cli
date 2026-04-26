@@ -20,7 +20,7 @@ These rules keep entries **small, stable, and aligned** with what the CLI and hu
 
 | Topic | Rule |
 |--------|------|
-| **Granularity** | Prefer **one exported function → one** `.md` under `.ariadne/registry/`. Do not put half a file’s narrative in a single “mega” entry. |
+| **Granularity** | Prefer **one resolvable `export` symbol (value, type, or re-export) → one** `.md` under `.ariadne/registry/`, per the CLI. Do not put half a file’s narrative in a single “mega” entry. |
 | **Purpose** | **1–3 short sentences** (English unless the project standard says otherwise). State *what* and *when* to use it, not a full design essay. The CLI can fill this from a passed purpose or the first JSDoc paragraph. |
 | **Code Signature** | **Contract only**: signature / parameters / return, **not** a copy of 20+ lines of loop/body. The canonical implementation stays in the **source file** listed as **Source**. If you need a line range, add a one-line “see `path#L`” in Purpose or a future note—do not mirror full algorithms here. |
 | **Contract (import / name / domain)** | For noisy signatures (e.g. React props objects, big inline types), the generator adds a **Contract** section. Fill **how to import or call**, **input value domain** (types, allowed values, invariants), and **output/return domain**; leave `n/a` only while unknown. This is the precision you want on top of the raw `Code Signature` block. |

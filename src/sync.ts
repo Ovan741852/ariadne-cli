@@ -4,7 +4,8 @@ import { loadAriadneConfig } from './config';
 import { ARIADNE_DEFAULT_CLI_PURPOSE, runUpdateFile } from './update';
 
 /**
- * 依 .ariadne/config.json 的 include / exclude 掃描專案並註冊可解析的匯出函式。
+ * 依 .ariadne/config.json 的 include / exclude 掃描專案並註冊可解析的
+ * 本模組內可解析的 `export`（函式、類別、型別、變數、re-export 等，見 `exportRegistry`）。
  * 不會「替 Agent 寫」自然語言 Purpose，只會用 JSDoc 或 CLI 預設佔位；與產品主線「讀源碼 → 寫 desc → update」分開。
  */
 export async function syncFromConfig(cwd: string = process.cwd()) {
