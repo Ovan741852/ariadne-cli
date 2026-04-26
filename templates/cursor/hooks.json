@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "command": "node .cursor/hooks/ariadne-post-tool-use.cjs",
+        "matcher": "Write|search_replace|str_replace|StrReplace",
+        "timeout": 30
+      }
+    ]
+  }
+}

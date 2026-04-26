@@ -1,13 +1,30 @@
 ---
-description: Ariadne Directive for Daedalus OS
+description: Ariadne rules — workflow and registry content contract (English)
 globs: *
 ---
-# Ariadne Directive
+# Ariadne
 
-在實作或修改任何功能前，你必須嚴格遵守以下流程：
+Before you write or change behavior, you **must** follow the workflow and the **content contract** below. The registry is a **map to the real source of truth** in the repo, not a second full copy of implementations.
 
-1. 檢索註冊表：使用 codebase search 查詢 `.ariadne/registry/` 目錄下的 `.md` 檔案。
-2. 優先重用：若找到符合需求的 Function/System，必須直接使用，並遵守其 `error_codes` 與 `dependencies` 規範。
-3. 嚴禁自創：禁止自行撰寫功能重疊的底層 API。
-4. 擴充建議：若查無相符選項，請告知開發者「未找到註冊組件，建議建立新擴充」。
-5. 註冊責任：當你（Agent）完成新模組的開發或重大修改後，你必須主動提醒開發者，或自行在終端機執行 `ariadne update <檔案路徑> "<功能簡述>"` 來更新註冊表。
+## Workflow (always)
+
+1. **Search** `.ariadne/registry/*.md` (e.g. codebase / semantic search) before adding parallel APIs.
+2. **Reuse** registered exports when they fit. If an entry lists `error_codes` or `dependencies` with real values, respect them. If a field is **`n/a` or empty**, there is no extra contract in the file—treat the **TypeScript source** in the path under **Source** as the authority; update the entry after meaningful changes.
+3. **No duplicate** bottom-layer APIs: do not re-implement what is already covered by a registry entry and its source file.
+4. **Missing entry**: tell the user no suitable component was found and suggest extending the registry and source.
+5. **Keep the registry current**: after you **Write** a registry-eligible file, the optional Cursor **`postToolUse` hook** from `ariadne init` will inject a reminder as **`additional_context`**: you must **re-read** the file, **author a 1–3 sentence English Purpose** (description) for what changed, then run `ariadne update <path> "<purpose or rely on JSDoc>"` yourself. The hook does **not** run `ariadne` headlessly; it nudges you to produce a good **desc** before/while updating. If the hook is off, run `update` the same way manually.
+
+## Ariadne registry content contract
+
+These rules keep entries **small, stable, and aligned** with what the CLI and humans maintain.
+
+| Topic | Rule |
+|--------|------|
+| **Granularity** | Prefer **one exported function → one** `.md` under `.ariadne/registry/`. Do not put half a file’s narrative in a single “mega” entry. |
+| **Purpose** | **1–3 short sentences** (English unless the project standard says otherwise). State *what* and *when* to use it, not a full design essay. The CLI can fill this from a passed purpose or the first JSDoc paragraph. |
+| **Code Signature** | **Contract only**: signature / parameters / return, **not** a copy of 20+ lines of loop/body. The canonical implementation stays in the **source file** listed as **Source**. If you need a line range, add a one-line “see `path#L`” in Purpose or a future note—do not mirror full algorithms here. |
+| **Freshness** | The registry is for **orientation, boundaries, and link-out**; it is **not** a second source tree. If an entry and its source disagree, **fix the entry** (or the code) in the same change. |
+| **error_codes** | Present in front matter. **`n/a`** = no error-code list is asserted for this entry yet. Fill when your API has stable error semantics. |
+| **dependencies** | Present in front matter. **`n/a`** = not specified. When order matters, write a one-line call/composition order (e.g. “use `foo` then `bar`”); keep it under one line if possible. |
+
+**Quality bar for agents and humans:** avoid duplicating another entry’s **Purpose** text; avoid pasting the same long paragraph for unrelated symbols. If you tighten types in source, re-run `update` for that file (or `sync` when you intentionally refresh many files).
