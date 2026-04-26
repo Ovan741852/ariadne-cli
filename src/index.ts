@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { initProject } from './init';
 import { updateRegistry } from './update';
 import { syncFromConfig } from './sync';
+import { runAudit } from './audit';
 
 const program = new Command();
 
@@ -21,7 +22,7 @@ program
   )
   .option(
     '--sync',
-    '在 init 最後執行 `ariadne sync` 建立 registry（不經 TTY 詢問，可與 -y 併用）'
+    '在 init 最後執行 ariadne sync：僅機械批掃產生骨架（非 Agent 代寫 desc，可與 -y 併用）'
   )
   .action((opts: { ide: string; yes?: boolean; sync?: boolean }) =>
     initProject({
@@ -38,9 +39,21 @@ program
 
 program
   .command('sync')
-  .description('依 .ariadne/config.json 掃描專案，批次註冊符合的檔案')
+  .description(
+    'Batch re-index: signatures + JSDoc/placeholder only (not agent-written desc; prefer update + hook)'
+  )
   .action(async () => {
     await syncFromConfig();
+  });
+
+program
+  .command('audit')
+  .description(
+    'List all exports vs registry: gaps + placeholder Purposes; paste output to the agent for a full pass'
+  )
+  .option('--json', 'One JSON object per symbol on stdout (for scripts)')
+  .action(async (opts: { json?: boolean }) => {
+    await runAudit(process.cwd(), { json: Boolean(opts.json) });
   });
 
 program.parse(process.argv);

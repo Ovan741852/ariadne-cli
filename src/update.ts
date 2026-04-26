@@ -10,7 +10,8 @@ import {
 
 /** When the user did not pass `[purpose]`, we prefer JSDoc; this string is the internal sentinel. */
 export const ARIADNE_DEFAULT_CLI_PURPOSE = '(cli purpose not provided)';
-const NO_JSDOC = 'No JSDoc summary.';
+/** Shown in generated `.md` when an export has no JSDoc; `audit` matches this to flag work. */
+export const ARIADNE_REGISTRY_EMPTY_PURPOSE = 'No JSDoc summary.';
 
 function getSignatureContractText(fn: FunctionDeclaration): string {
   const body = fn.getBody();
@@ -83,7 +84,9 @@ export async function runUpdateFile(
 
     for (const func of functions) {
       const name = func.getName()!;
-      const jsDoc = func.getJsDocs()[0]?.getDescription().trim() || NO_JSDOC;
+      const jsDoc =
+        func.getJsDocs()[0]?.getDescription().trim() ||
+        ARIADNE_REGISTRY_EMPTY_PURPOSE;
       const contractHead = getSignatureContractText(func);
       const purposeBody =
         purpose !== ARIADNE_DEFAULT_CLI_PURPOSE ? purpose : jsDoc;
@@ -106,6 +109,17 @@ ${purposeBody}
 \`\`\`typescript
 ${contractHead}
 \`\`\`
+
+## Contract (import / name / value domain)
+Renders best when the signature alone (e.g. a large inline props type) is ambiguous. Flesh out for consumers: **how to import or call**, **name**, **input bounds**, **output / return domain**.
+
+- **How to import or call (pattern):** n/a *— e.g. \`import { ${name} } from '...'\` or the intended usage shape; default vs named.*
+- **Exported symbol:** \`${name}\`
+- **Input value domain (types, allowed set, invariants):** n/a *— props/args, numeric ranges, unions, "must be" rules.*
+- **Output / return value domain:** n/a *— return type, rendered subtree contract, or side-effect summary.*
+
+## error codes & reasons
+- n/a *— when stable, list \`code\` or category → **reason** (and align short codes in YAML \`error_codes\` above, if you replace \`"n/a"\` there).*
 `;
 
       const outPath = path.join(registryDir, `${fileNameKey}_${name}.md`);

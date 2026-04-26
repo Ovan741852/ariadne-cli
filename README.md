@@ -48,7 +48,7 @@ ariadne init -y --sync
 - **`--ide`** 預設為 `cursor`。**目前僅實作 Cursor**（寫入 `.cursor/rules/ariadne.mdc`）。日後若支援其他 IDE，會擴充同一參數；傳不支援的名稱會出錯並列印目前可選清單。
 - **`.ariadne/config.json` 還沒有時**，在**有鍵盤的互動式終端**裡會**先詢問**是否採用內建建議；若答否，可再依提示輸入自訂的 **include / exclude**（glob、逗號分隔）。若偵測到 **非互動**（如管線、或沒有 TTY），則**不詢問**，直接寫入內建預設。CI 常見的 `CI=true` 也會**不詢問**。
 - **`-y` / `--yes`**：略過上述詢問，永遠寫入內建 `config`（腳本／CI 可與之搭配）。  
-- **`--sync`**：在 init 流程**全部完成後**執行一次 `ariadne sync` 建立/更新 registry（不經互動，可與 `-y` 併用）。不帶此參數時，若在**互動式 TTY** 上執行 init，**最後**另有一題（**英文**）：`Run ariadne sync to populate... [y/N]`，預設否，避免一進專案就掃全庫。  
+- **`--sync`**：在 init 流程**全部完成後**執行一次 `ariadne sync`（**只產簽名＋JSDoc/佔位**，**不**等於「讓 Agent 幫寫人話敘事」；敘事品質主線仍見 postToolUse + `update`）。不經互動，可與 `-y` 併用。不帶此參數時，在**互動式 TTY** 上**最後**另有一題（**英文**）：`Run ariadne sync to populate... [y/N]`，預設否。  
 - **內容契約**（用英文寫在 `.cursor/rules/ariadne.mdc`）：**Purpose 長度、一符號一檔、Code Signature 只含簽名不含整段實作、`error_codes` / `dependencies` 的語意**等，以規則檔與產生器行為一致為準，見下節與 ariadne.mdc。
 
 會建立：
@@ -78,17 +78,30 @@ ariadne init -y --sync
 - 預設只涵蓋 `**/*.ts` 與 `**/*.tsx`，並排除 `node_modules`、`dist`、測試檔（`*.test.ts` / `*.spec.*` 等）與 `.d.ts` 等。可依專案修改。
 - **`ariadne update` 單檔**時，路徑**必須**符合這套規則，否則 CLI 會拒絕（請改設定或只註冊在允許路徑下的檔案）。
 
-**有必要一次掃全專案嗎？** 不必。預期流程仍以「**改好一段就 `update` 一個檔**」或 CI 有選擇地跑為主。若你確實要依設定**掃一輪**（例如導入既有大庫、重建 registry），用下面的 **`ariadne sync`** 即可，不必讓掃描成唯一途徑。
+**有必要一次掃全專案嗎？** 不必。**品質上**的「同步」是：**Agent 讀你改的檔、寫好 1–3 句 desc（或加 JSDoc）→ 再 `ariadne update`**；Cursor **postToolUse** hook 就是在推這條主線。  
+`sync` **不是**那條主線的替代品：它只是**機械批掃**（簽名 + 有就抄 JSDoc、沒有就佔位），冷啟動 / CI 骨架、或你明知可以接受大量佔位時才用。
 
-### 3. 批次掃描 `ariadne sync`
+### 3. 批次掃描 `ariadne sync`（機械批處／骨架，≠ Agent 幫寫敘事）
 
-依**目前**的 `include` / `exclude` 尋找所有檔案，再對**每一個**符合的檔執行與 `update` 相同的邏輯；用途敘述一律走 JSDoc/預設，**不**在指令上逐檔帶 `purpose`：
+依 `include` / `exclude` 掃專案，每檔等同不帶 purpose 的 `update`：**不會**替你產生「讀完程式後的人話 Purpose」；有 JSDoc 就抄，沒有就 `No JSDoc summary` 一類。執行時也會在終端**印出英文提醒**說明這一點。
 
 ```bash
 ariadne sync
 ```
 
-專案很大、或測試檔眾多時，請**先**把 `exclude` 與測試模式調好，避免產生過多條目。
+專案大、測試檔多時，請先調好 `exclude`；敘事想好看，**事後**仍要靠 **JSDoc、`update` 帶 purpose、或 Agent 依規則改 `.md` / 再 `update`**。
+
+#### 讓 Agent **一次**做全專案檢查（非 `sync`）
+
+CLI **不會幫你叫 LLM**，但 `ariadne audit` 會掃你 `config` 裡涵蓋的**每一個** `export` 函式，比對 **registry 有沒有檔、Purpose 是否還是佔位**（`No JSDoc summary`），最後在終端產生一段**可整段貼到 Cursor** 的英文任務說明。
+
+```bash
+ariadne audit
+# 若要用腳本重定向：一列一筆 JSON
+ariadne audit --json
+```
+
+**建議流程**：`audit` 輸出 → 貼進 Agent 對話 → 請它照表逐檔 `read` + 寫 Purpose / JSDoc + 跑 `ariadne update`（可分批 commit）。這才是「**一次全檢驗**敘事品質」的主線，與**機械**的 `sync` 分清楚。
 
 ### 4. 單檔註冊 `ariadne update`
 
@@ -133,7 +146,7 @@ ariadne update src/core/combat.ts "實體傷害結算與死亡判定"
 
 1. **靜態萃取**：讀入 TS 檔，掃描 `export` 的函式宣告。  
 2. **語意合併**：CLI 的 `[用途說明]` 與 JSDoc 說明一併反映在產出 Markdown 的 *Purpose* 一節。  
-3. **產出格式**：每支匯出函式一檔，路徑為 `.ariadne/registry/<檔名>_<函式名>.md`；front matter 含 `id` / `type` / `source` / `error_codes` / `dependencies`；本體含 **Purpose**、**Code Signature (contract, not full body)**，簽名區塊在可能範圍內不貼上函式內**大段實作**（本體仍以源碼為單一真相）。
+3. **產出格式**：每支匯出函式一檔；front matter 含 `id` / `type` / `source` / `error_codes` / `dependencies`；本體除 **Purpose** 與 **Code Signature**（不貼函式本體）外，還有 **Contract (import / name / value domain)** 與 **error codes & reasons** 骨架（多為 `n/a`），讓團隊補 **import/呼叫方式、名稱、值域、錯因**，比只看簽名更精準；仍以源碼為單一真相。
 
 ## 產出範例
 
@@ -157,6 +170,17 @@ Resolves physical damage and death on an entity (example).
 
 ## Code Signature (contract, not full body)
     export function takeDamage(targetId: string, amount: number): void
+
+## Contract (import / name / value domain)
+(… 以下為產生器帶出之佔位；讀型別/實作後把 n/a 改成你們要的 import/值域/輸出域。)
+
+- **How to import or call (pattern):** n/a
+- **Exported symbol:** `takeDamage`
+- **Input value domain (…):** n/a
+- **Output / return value domain:** n/a
+
+## error codes & reasons
+- n/a
 ~~~
 
 ## 本機開發

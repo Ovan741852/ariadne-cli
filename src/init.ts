@@ -16,7 +16,7 @@ export type InitOptions = {
   ide: string;
   /** 不詢問 config，直接寫入內建 include/exclude */
   yes: boolean;
-  /** 結束後執行 `ariadne sync`；與 TTY 詢問互斥時以此為準 */
+  /** 結束後執行 ariadne sync（機械骨架，非敘事品質主流程）；與 TTY 詢問互斥時以此為準 */
   sync: boolean;
 };
 
@@ -169,13 +169,15 @@ export async function initProject(options: InitOptions) {
     }
 
     if (options.sync) {
-      console.log('▶ 執行 ariadne sync（依 .ariadne/config.json）…');
+      console.log(
+        '▶ 執行 ariadne sync（機械批處／骨架，非 Agent 代寫 Description；可之後用 update 或 JSDoc 補敘事）…'
+      );
       await syncFromConfig(cwd);
     } else if (!skipPrompt && process.stdin.isTTY) {
       const rl = createInterface({ input: process.stdin, output: process.stdout });
       try {
         const line = await rl.question(
-          '\nRun `ariadne sync` to populate the registry from existing source files? [y/N] '
+          '\nRun `ariadne sync` for a **mechanical index** (signatures + JSDoc/placeholders only — not agent-written descriptions)? [y/N] '
         );
         const a = line.trim();
         if (a !== '' && /^y(es)?$/i.test(a)) {
