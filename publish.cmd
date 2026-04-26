@@ -2,7 +2,7 @@
 chcp 65001 >nul
 color 0A
 echo =========================================
-echo    Ariadne NPM 本地一鍵發布腳本
+echo    Ariadne NPM 本地發布腳本 (含 2FA)
 echo =========================================
 echo.
 
@@ -34,8 +34,15 @@ echo [4/6] 升級 NPM 版號 (自動 +0.0.1)...
 call npm version patch
 
 echo.
-echo [5/6] 直接發布至 NPM...
-call npm publish --access public
+echo [5/6] 發布至 NPM (雙重驗證)...
+echo ⚠️ 偵測到 NPM 2FA 安全機制。
+set /p otp="請打開手機 Authenticator App，輸入 6 位數驗證碼 (無則直接按 Enter): "
+
+if "%otp%"=="" (
+    call npm publish --access public
+) else (
+    call npm publish --access public --otp=%otp%
+)
 
 echo.
 echo [6/6] 同步至 GitHub...
