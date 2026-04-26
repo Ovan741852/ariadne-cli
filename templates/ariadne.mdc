@@ -1,13 +1,13 @@
 ---
-alwaysApply: true
-globs:*
+description: Ariadne Directive for Daedalus OS
+globs: *
 ---
 # Ariadne Directive
 
-你是基於 Daedalus 引擎開發的 AI Agent。
 在實作或修改任何功能前，你必須嚴格遵守以下流程：
 
 1. 檢索註冊表：使用 codebase search 查詢 `.ariadne/registry/` 目錄下的 `.md` 檔案。
 2. 優先重用：若找到符合需求的 Function/System，必須直接使用，並遵守其 `error_codes` 與 `dependencies` 規範。
 3. 嚴禁自創：禁止自行撰寫功能重疊的底層 API。
-4. 若無相符選項：請告知開發者「未找到註冊組件，建議建立新擴充或執行 ariadne sync」。
+4. 擴充建議：若查無相符選項，請告知開發者「未找到註冊組件，建議建立新擴充」。
+5. 註冊責任：當你（Agent）完成新模組的開發或重大修改後，你必須主動提醒開發者，或自行在終端機執行 `ariadne update <檔案路徑> "<功能簡述>"` 來更新註冊表。
