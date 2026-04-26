@@ -1,6 +1,6 @@
 {
   "name": "@koncrate/ariadne-cli",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Daedalus AI OS Middleware",
   "main": "dist/index.js",
   "files": [
