@@ -12,7 +12,12 @@ Before you write or change behavior, you **must** follow the workflow and the **
 2. **Reuse** registered exports when they fit. If an entry lists `error_codes` or `dependencies` with real values, respect them. If a field is **`n/a` or empty**, there is no extra contract in the file—treat the **TypeScript source** in the path under **Source** as the authority; update the entry after meaningful changes.
 3. **No duplicate** bottom-layer APIs: do not re-implement what is already covered by a registry entry and its source file.
 4. **Missing entry**: tell the user no suitable component was found and suggest extending the registry and source.
-5. **Keep the registry current**: after you **Write** a registry-eligible file, the optional Cursor **`postToolUse` hook** from `ariadne init` will inject a reminder as **`additional_context`**: you must **re-read** the file, **author a 1–3 sentence English Purpose** (description) for what changed, then run `ariadne update <path> "<purpose or rely on JSDoc>"` yourself. The hook does **not** run `ariadne` headlessly; it nudges you to produce a good **desc** before/while updating. If the hook is off, run `update` the same way manually.
+5. **Keep the registry current** (required **whether or not hooks work**): after you **Write** or meaningfully **edit** a registry-eligible TypeScript file (one covered by `.ariadne/config.json` `include` / `exclude`), you **must**:
+   - **Re-read** the file;
+   - **Author** a **1–3 sentence English Purpose** for each affected export (or add **JSDoc** on the export so the CLI can pick it up);
+   - Run **`ariadne update <path-to-file>`** (with an explicit purpose string, or rely on JSDoc) from the project root so `.ariadne/registry` and `source_fingerprint` stay aligned.
+
+   The optional Cursor **`postToolUse` hook** (from `ariadne init`) is only a **reminder** via **`additional_context`**; it does **not** run `ariadne` for you. **If hooks are missing, disabled, or unsupported** in the user’s Cursor build / settings / Tab vs Chat / CI—**this obligation does not change**: you still **must** complete **Purpose (or JSDoc) + `update`**. Do not skip the registry because no hook fired.
 
 ## Ariadne registry content contract
 
@@ -28,10 +33,10 @@ These rules keep entries **small, stable, and aligned** with what the CLI and hu
 | **Freshness** | The registry is for **orientation, boundaries, and link-out**; it is **not** a second source tree. If an entry and its source disagree, **fix the entry** (or the code) in the same change. |
 | **error_codes** | Present in front matter. **`n/a`** = no error-code list is asserted for this entry yet. Fill when your API has stable error semantics. |
 | **dependencies** | Present in front matter. **`n/a`** = not specified. When order matters, write a one-line call/composition order (e.g. “use `foo` then `bar`”); keep it under one line if possible. |
-| **source_fingerprint** | Present in front matter (`sha256:…`). Written by `ariadne update` / `sync` from the **full** local export AST node text. If **`ariadne audit`** marks **fingerprint stale**, re-read source and refresh Purpose / Contract, then re-run **`update`** for that source file so the fingerprint matches again. |
+| **source_fingerprint** | Present in front matter (`sha256:…`). Written by **`ariadne update`** from the **full** local export AST node text. If **`ariadne audit`** marks **fingerprint stale**, re-read the source, author fresh Purpose (or JSDoc), then re-run **`ariadne update` on that file** so the registry `.md` and fingerprint match. For a filtered list of paths, use **`ariadne audit --files`**, then **per-file `update`**; **`audit` does not write `.md`**. |
 
-**`ariadne sync` vs. real “semantic” updates:** `sync` batch-rebuilds every matched file with **JSDoc or a placeholder** only. It is **not** a substitute for having the **agent read the code and author Purpose**; use **`ariadne update <file> "…" after reading`**, or add JSDoc then re-`update`. Reserve `sync` for cold start / CI skeletons / intentional bulk re-index, then refine entries.
+**`audit` vs. `update`:** **`ariadne audit`** reconciles the tree and **reports** (including **stale** and missing files); it **never** writes registry `.md`. Fingerprint and narrative stay correct by **re-read source → new Purpose (or JSDoc) → `ariadne update`**, optionally guided by **`ariadne audit --files`** to pick which source files to open next.
 
 **One-shot full check:** run `ariadne audit` in the project root (full table + Summary). Use **`ariadne audit --stale`** or **`--issues`** to narrow rows; **`ariadne audit --files --stale`** prints one source path per line for the agent to open and **`update`**. The CLI does not call an LLM itself.
 
-**Quality bar for agents and humans:** avoid duplicating another entry’s **Purpose** text; avoid pasting the same long paragraph for unrelated symbols. If you tighten types in source, re-run `update` for that file (or `sync` only when you accept placeholder-quality text and will fix Purposes afterward).
+**Quality bar for agents and humans:** avoid duplicating another entry’s **Purpose** text; avoid pasting the same long paragraph for unrelated symbols. If you tighten types in source, re-run `update` for that file.

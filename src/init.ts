@@ -8,7 +8,6 @@ import {
   DEFAULT_ARIADNE_CONFIG,
   type AriadneConfig,
 } from './config';
-import { syncFromConfig } from './sync';
 
 const SUPPORTED_IDE = new Set<string>(['cursor']);
 
@@ -16,8 +15,6 @@ export type InitOptions = {
   ide: string;
   /** 不詢問 config，直接寫入內建 include/exclude */
   yes: boolean;
-  /** 結束後執行 ariadne sync（機械骨架，非敘事品質主流程）；與 TTY 詢問互斥時以此為準 */
-  sync: boolean;
 };
 
 function normalizeIde(raw: string | undefined): string {
@@ -38,7 +35,7 @@ async function promptForNewConfigInteractive(): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
     const line1 = await rl.question(
-      '\n將建立 .ariadne/config.json（定義 update/sync 能處理哪些檔案）。\n' +
+      '\n將建立 .ariadne/config.json（定義 `ariadne update` 能處理哪些檔案）。\n' +
         '使用內建建議（**/*.ts、**/*.tsx，並排除測試、node_modules、dist 等）？ [Y/n] '
     );
     const a1 = line1.trim();
@@ -195,28 +192,6 @@ export async function initProject(options: InitOptions) {
       }
     } else {
       console.error('❌ 找不到 skill 範本:', skillFrom);
-    }
-
-    if (options.sync) {
-      console.log(
-        '▶ 執行 ariadne sync（機械批處／骨架，非 Agent 代寫 Description；可之後用 update 或 JSDoc 補敘事）…'
-      );
-      await syncFromConfig(cwd);
-    } else if (!skipPrompt && process.stdin.isTTY) {
-      const rl = createInterface({ input: process.stdin, output: process.stdout });
-      try {
-        const line = await rl.question(
-          '\nRun `ariadne sync` for a **mechanical index** (signatures + JSDoc/placeholders only — not agent-written descriptions)? [y/N] '
-        );
-        const a = line.trim();
-        if (a !== '' && /^y(es)?$/i.test(a)) {
-          await syncFromConfig(cwd);
-        } else {
-          console.log('ℹ️ Skipped. Run `ariadne sync` when you are ready.');
-        }
-      } finally {
-        await rl.close();
-      }
     }
   } catch (err) {
     console.error('❌ 初始化失敗:', err);

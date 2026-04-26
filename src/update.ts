@@ -26,7 +26,7 @@ export const ARIADNE_DEFAULT_CLI_PURPOSE = '(cli purpose not provided)';
 export const ARIADNE_REGISTRY_EMPTY_PURPOSE = 'No JSDoc summary.';
 
 export type RunUpdateOptions = {
-  /** 單檔 update 時做規範校驗；sync 已以 glob 篩過則關掉 */
+  /** 單檔 `update` 介面做規範校驗；內部呼叫可關閉 */
   checkConfig?: boolean;
 };
 

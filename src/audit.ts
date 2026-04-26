@@ -244,7 +244,7 @@ export async function runAudit(
     '',
     `- Exports in scope: **${rows.length}**`,
     `- **Fingerprint stale** (missing/mismatched \`source_fingerprint\` vs current source nodes): **${staleRows.length}**`,
-    `- **Fingerprint in sync**: **${staleOk}**`,
+    `- **Fingerprint up to date**: **${staleOk}**`,
     `- **Needs registry work** (missing file or placeholder Purpose): **${workQueue.length}**`,
     `- registry file **missing**: **${missing.length}**`,
     `- registry exists but **Purpose** is still placeholder: **${needsNarrative.length}**`,
@@ -275,7 +275,7 @@ export async function runAudit(
     '',
     '1. Rows with **fingerprint stale = yes**: re-read the **Source** export in the repo; update Purpose / Contract if the behavior changed; then run `ariadne update "<Source path>"` so `source_fingerprint` is refreshed.',
     '2. Rows with **missing registry** or **Purpose placeholder**: write 1-3 sentence English Purpose (or JSDoc on the export), then `ariadne update "<Source path>"`.',
-    '3. Prefer JSDoc on stable APIs. Do not rely on `ariadne sync` alone for narrative quality.',
+    '3. Prefer JSDoc on stable APIs, then re-run `ariadne update` on affected source files as Purpose catches up to code.',
     '```',
     ''
   );
