@@ -13,6 +13,7 @@ import {
   safeRegistryFileName,
   type RegistryExportTypeTag,
 } from './exportRegistry';
+import { fingerprintForExportNodes } from './sourceFingerprint';
 
 export type { RegistryExportTypeTag };
 
@@ -73,7 +74,7 @@ export async function runUpdateFile(
 
     if (items.length === 0) {
       console.log(
-        `⚠️ 在 ${rel} 中沒有可註冊的具名匯出。已略過純 \`export * from '...'\`（不為每個外層符號產一檔）；\`export =\` 等格式亦未支援。`
+        `⚠️ 在 ${rel} 中沒有可註冊的本檔匯出（僅 re-export barrel、\`export * from '...'\`、或 \`export =\` 等會略過）。`
       );
       return true;
     }
@@ -92,10 +93,12 @@ export async function runUpdateFile(
       const typeTag: RegistryExportTypeTag = type;
 
       const safeFile = safeRegistryFileName(name);
+      const sourceFingerprint = fingerprintForExportNodes(localNodes);
       const mdContent = `---
 id: "${fileNameKey}.${name.replace(/"/g, '\\"')}"
 type: "${typeTag}"
 source: "${relpos.replace(/"/g, '\\"')}"
+source_fingerprint: "${sourceFingerprint}"
 error_codes: "n/a"
 dependencies: "n/a"
 ---

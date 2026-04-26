@@ -49,11 +49,35 @@ program
 program
   .command('audit')
   .description(
-    'List all exports vs registry: gaps + placeholder Purposes; paste output to the agent for a full pass'
+    'Full scan vs registry: counts + table. --issues (Purpose/missing), --stale (source_fingerprint drift), --files (paths only), --json'
   )
   .option('--json', 'One JSON object per symbol on stdout (for scripts)')
-  .action(async (opts: { json?: boolean }) => {
-    await runAudit(process.cwd(), { json: Boolean(opts.json) });
-  });
+  .option(
+    '--issues',
+    'Only rows: missing registry .md or placeholder Purpose (OR with --stale: union filter)'
+  )
+  .option(
+    '--stale',
+    'Only rows where source_fingerprint is missing or != hash of current export AST nodes'
+  )
+  .option(
+    '--files',
+    'Print deduplicated source paths (one per line) for the row set after --issues/--stale; no markdown'
+  )
+  .action(
+    async (opts: {
+      json?: boolean;
+      issues?: boolean;
+      stale?: boolean;
+      files?: boolean;
+    }) => {
+      await runAudit(process.cwd(), {
+        json: Boolean(opts.json),
+        issuesOnly: Boolean(opts.issues),
+        staleOnly: Boolean(opts.stale),
+        filesOnly: Boolean(opts.files),
+      });
+    }
+  );
 
 program.parse(process.argv);

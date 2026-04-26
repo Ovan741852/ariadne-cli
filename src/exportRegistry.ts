@@ -2,8 +2,7 @@ import { Node, SyntaxKind, type SourceFile } from 'ts-morph';
 import type { Node as MorphNode } from 'ts-morph';
 
 /**
- * `type` in front matter. Covers everything consumers may import from this file.
- * `ReExport` = this file only re-exports the name from another module (no local body).
+ * `type` in front matter. Covers **local** declarations in this file (no pure re-export rows).
  */
 export type RegistryExportTypeTag =
   | 'Function'
@@ -13,7 +12,6 @@ export type RegistryExportTypeTag =
   | 'Interface'
   | 'Enum'
   | 'Namespace'
-  | 'ReExport'
   | 'DefaultExport'
   | 'Expression';
 
@@ -23,7 +21,7 @@ export type RegistryExportItem = {
   /** Sort key: earliest declaration in file */
   orderPos: number;
   codeSignature: string;
-  /** In-file nodes used for JSDoc; may be a single `ExportDeclaration` for `ReExport` */
+  /** In-file AST nodes for this export (JSDoc + fingerprint). */
   localNodes: MorphNode[];
 };
 
@@ -46,12 +44,11 @@ function sliceBeforeBody(
 }
 
 /**
- * Public API surface: **declarations in this file** + **named re-exports** (per symbol).
- * Unnamed `export * from 'm'` (without `as name`) is omitted to avoid one registry per foreign symbol.
+ * **Local** exports only (`getExportedDeclarations` with declarations in this file).
+ * Pure `export { x } from '…'`, `export * as ns from '…'`, and `export * from '…'` are not registered here.
  */
 export function listRegistryExportItems(sourceFile: SourceFile): RegistryExportItem[] {
   const fileText = sourceFile.getFullText();
-  const seen = new Set<string>();
   const items: RegistryExportItem[] = [];
 
   for (const [name, decls] of sourceFile.getExportedDeclarations()) {
@@ -77,60 +74,10 @@ export function listRegistryExportItems(sourceFile: SourceFile): RegistryExportI
       codeSignature: code,
       localNodes: local,
     });
-    seen.add(name);
-  }
-
-  for (const ed of sourceFile.getExportDeclarations()) {
-    if (!ed.hasModuleSpecifier()) continue;
-    if (!ed.hasNamedExports() && !ed.isNamespaceExport()) {
-      continue; // e.g. `export * from './x'`
-    }
-
-    if (ed.isNamespaceExport() && ed.getNamespaceExport()) {
-      const nexp = ed.getNamespaceExport()!;
-      const publicName = nexp.getName();
-      if (seen.has(publicName)) continue;
-      seen.add(publicName);
-      items.push({
-        name: publicName,
-        type: 'ReExport',
-        orderPos: ed.getStart(),
-        codeSignature: ed.getText().trim(),
-        localNodes: [ed],
-      });
-      continue;
-    }
-
-    for (const ne of ed.getNamedExports()) {
-      const exportName = ne.getAliasNode()
-        ? ne.getAliasNode()!.getText()
-        : ne.getName();
-      if (seen.has(exportName)) continue;
-      seen.add(exportName);
-      const line = formatNamedReExportLine(ne, ed);
-      items.push({
-        name: exportName,
-        type: 'ReExport',
-        orderPos: ne.getStart(),
-        codeSignature: line,
-        localNodes: [ed],
-      });
-    }
   }
 
   items.sort((a, b) => a.orderPos - b.orderPos || a.name.localeCompare(b.name));
   return items;
-}
-
-function formatNamedReExportLine(
-  ne: import('ts-morph').ExportSpecifier,
-  ed: import('ts-morph').ExportDeclaration
-): string {
-  const mod = ed.getModuleSpecifier()?.getText() ?? "''";
-  const inner = ne.getAliasNode()
-    ? `${ne.getName()} as ${ne.getAliasNode()!.getText()}`
-    : ne.getName();
-  return `export { ${inner} } from ${mod}`;
 }
 
 function selectTypeTag(
@@ -249,7 +196,8 @@ function truncate(s: string, max: number): string {
 
 export function pickJSDocDescription(nodes: MorphNode[]): string {
   for (const n of nodes) {
-    const t = n.getJsDocs?.()?.[0]?.getDescription().trim();
+    if (!Node.isJSDocable(n)) continue;
+    const t = n.getJsDocs()[0]?.getDescription().trim();
     if (t) return t;
   }
   return '';
@@ -318,14 +266,6 @@ export function contractHints(
       importHint: `e.g. \`import { ${name} } from '...'\` or \`import * as ${name}\` per project style.`,
       inputHint: 'sub-symbols, nesting, when to use vs regular modules.',
       outputHint: 'what the namespace groups and how to extend it.',
-    };
-  }
-  if (t === 'ReExport') {
-    return {
-      importHint:
-        "This name is re-exported from another module. Prefer linking to the **canonical** implementation's registry entry or the dependency package.",
-      inputHint: 'n/a — see original module, or set here if the facade adds constraints.',
-      outputHint: 'n/a — see original module, or what this barrel guarantees.',
     };
   }
   return {

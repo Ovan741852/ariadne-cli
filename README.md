@@ -2,7 +2,7 @@
 
 在專案裡建立**可機讀的語意註冊與 Schema 索引**，讓 Cursor 等工具能照著既有邏輯與 API 約束開發，減少憑空杜撰的實作路徑。
 
-- 以 **TypeScript AST**（[ts-morph](https://github.com/dsherret/ts-morph)）依 `getExportedDeclarations` 盡量涵蓋**本檔內的具名匯出**（函式、類別、`const`／`let` 變數、型別、介面、列舉、`namespace`、以及具名 / `* as` 的 **re-export**；**不**為單純 `export * from '...'` 的每個外層符號各產一檔；**不**涵蓋 `export =` 等 CommonJS 風格）  
+- 以 **TypeScript AST**（[ts-morph](https://github.com/dsherret/ts-morph)）依 `getExportedDeclarations` 盡量涵蓋**本檔內有主體的匯出**（函式、類別、`const`／`let`、型別、介面、列舉、`namespace`、default 等）；**不**為純 `export { x } from '…'` / `export * as` / `export * from '…'` 建條目；**不**涵蓋 `export =` 等 CommonJS 風格。每筆 registry 的 YAML 含 **`source_fingerprint`**（單一 export 節點全文之 SHA-256），供 `audit --stale` 偵測源碼是否已變。  
 - 將 `update` 時可選的**用途說明**寫入註冊內容  
 - 產出 **RAG 友善**的 Markdown 置於 `.ariadne/registry/`，搭配 **`.cursor/rules/ariadne.mdc`**（內容契約）與 **`.cursor/skills/ariadne-registry/SKILL.md`**（Agent 技能：何時/如何 `update`）讓代理能檢索並維護脈絡  
 
@@ -94,19 +94,32 @@ ariadne sync
 
 #### 讓 Agent **一次**做全專案檢查（非 `sync`）
 
-CLI **不會幫你叫 LLM**，但 `ariadne audit` 會掃你 `config` 裡涵蓋的**每一個**可註冊的 `export` 符號，比對 **registry 有沒有檔、Purpose 是否還是佔位**（`No JSDoc summary`），最後在終端產生一段**可整段貼到 Cursor** 的英文任務說明。
+CLI **不會幫你叫 LLM**。`ariadne audit` 先**全掃** config 內每個可註冊 export，**Summary** 給總量與幾類問題數；預設表格列出**全部**列，並多一欄 **`fingerprint stale`**（`source_fingerprint` 與目前 AST 節點全文 digest **不一致**或缺欄＝源碼變過或尚未寫入指紋，應 review 並 `update`）。
+
+**篩選與 agent 友善輸出：**
+
+| 旗標 | 作用 |
+|------|------|
+| `--issues` | 只列：缺 registry 檔，或 Purpose 仍為佔位（不含「僅無 JSDoc」） |
+| `--stale` | 只列：`fingerprint stale` 為真 |
+| `--issues` 與 `--stale` 同時開 | **聯集**（任一成立即列） |
+| `--files` | 依**目前篩選後**的列，印**去重**的來源檔相對路徑，**一行一檔**（無 markdown） |
+| `--json` | 每 symbol 一筆 JSON；可與上列併用 |
 
 ```bash
 ariadne audit
-# 若要用腳本重定向：一列一筆 JSON
-ariadne audit --json
+ariadne audit --issues
+ariadne audit --stale
+ariadne audit --issues --stale
+ariadne audit --files --stale
+ariadne audit --json --issues
 ```
 
-**建議流程**：`audit` 輸出 → 貼進 Agent 對話 → 請它照表逐檔 `read` + 寫 Purpose / JSDoc + 跑 `ariadne update`（可分批 commit）。這才是「**一次全檢驗**敘事品質」的主線，與**機械**的 `sync` 分清楚。
+**建議流程**：用 **`--stale` / `--issues` / `--files`** 得到要動的檔 → 讀源碼與既有 `.md` → 補敘事或 JSDoc → **`ariadne update "<路徑>"`** 刷新該檔所有條目與 `source_fingerprint`。與**機械**的 `sync` 分清楚。
 
 ### 4. 單檔註冊 `ariadne update`
 
-將指定 **TypeScript 檔**中**可註冊的匯出**（本檔內有主體的匯出 + 具名 re-export；見上方說明）寫入註冊表。路徑為相對目前工作目錄，**且**須在 `config` 的允許範圍內。
+將指定 **TypeScript 檔**中**可註冊的匯出**（僅本檔內有主體的宣告；見上方）寫入註冊表，並寫入 **`source_fingerprint`**。路徑為相對目前工作目錄，**且**須在 `config` 的允許範圍內。
 
 ```bash
 ariadne update <檔案路徑> "[可選：用途說明]"
@@ -147,7 +160,7 @@ ariadne update src/core/combat.ts "實體傷害結算與死亡判定"
 
 1. **靜態萃取**：讀入 TS 檔，掃描可註冊的 `export` 符號（實作見 `exportRegistry`）。  
 2. **語意合併**：CLI 的 `[用途說明]` 與 JSDoc 說明一併反映在產出 Markdown 的 *Purpose* 一節。  
-3. **產出格式**：**一個匯出符號一檔**（`fileKey_${safeName}.md`；re-export 亦一符號一檔）；`type` 欄位標示 `Function` / `Class` / `Variable` / `TypeAlias` / `Interface` / `Enum` / `Namespace` / `ReExport` / `DefaultExport` / `Expression` 等；本體除 **Purpose** 與 **Code Signature** 外，還有 **Contract** 與 **error codes & reasons** 骨架；仍以源碼為單一真相。
+3. **產出格式**：**一個匯出符號一檔**（`fileKey_${safeName}.md`）；front matter 含 `source_fingerprint`（`sha256:…`）；`type` 為 `Function` / `Class` / `Variable` / `TypeAlias` / `Interface` / `Enum` / `Namespace` / `DefaultExport` / `Expression` 等；本體除 **Purpose** 與 **Code Signature** 外，還有 **Contract** 與 **error codes & reasons** 骨架；仍以源碼為單一真相。
 
 ## 產出範例
 
@@ -158,6 +171,7 @@ ariadne update src/core/combat.ts "實體傷害結算與死亡判定"
 id: "combat.takeDamage"
 type: "Function"
 source: "src/combat/take.ts"
+source_fingerprint: "sha256:…"
 error_codes: "n/a"
 dependencies: "n/a"
 ---

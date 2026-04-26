@@ -9,10 +9,25 @@ import {
   pickJSDocDescription,
   safeRegistryFileName,
 } from './exportRegistry';
+import {
+  fingerprintForExportNodes,
+  fingerprintStale,
+  parseStoredFingerprintFromRegistryFile,
+} from './sourceFingerprint';
 
 export type AuditOptions = {
-  /** JSON line per row to stdout (for scripts) */
   json?: boolean;
+  /**
+   * Only rows: missing registry .md or placeholder Purpose (not “no JSDoc only”).
+   */
+  issuesOnly?: boolean;
+  /** Only rows where stored `source_fingerprint` != current export-node digest. */
+  staleOnly?: boolean;
+  /**
+   * Print one relative source path per line (deduped), from the row set after
+   * `--issues` / `--stale` filters; no markdown report.
+   */
+  filesOnly?: boolean;
 };
 
 type Row = {
@@ -22,17 +37,48 @@ type Row = {
   registryExists: boolean;
   sourceHasJSDoc: boolean;
   purposeLooksEmpty: boolean;
+  currentFingerprint: string;
+  storedFingerprint: string | null;
+  fingerprintStale: boolean;
 };
 
+function rowNeedsRegistryWork(r: Row): boolean {
+  return !r.registryExists || r.purposeLooksEmpty;
+}
+
+function computeDisplayRows(
+  rows: Row[],
+  issuesOnly: boolean,
+  staleOnly: boolean
+): Row[] {
+  if (issuesOnly && staleOnly) {
+    return rows.filter(
+      (r) => rowNeedsRegistryWork(r) || r.fingerprintStale
+    );
+  }
+  if (issuesOnly) {
+    return rows.filter(rowNeedsRegistryWork);
+  }
+  if (staleOnly) {
+    return rows.filter((r) => r.fingerprintStale);
+  }
+  return rows;
+}
+
 /**
- * Compare every resolvable `export` (see `listRegistryExportItems`) under config
- * globs with `.ariadne/registry` entries
- * and print a report + a block the user can paste to an agent for one-shot review.
+ * Compare every local `export` under config globs with `.ariadne/registry` entries.
+ * Default: full table. `--issues` / `--stale` narrow rows; `--files` prints deduped paths only.
  */
 export async function runAudit(
   cwd: string = process.cwd(),
   options: AuditOptions = {}
 ) {
+  const {
+    issuesOnly = false,
+    staleOnly = false,
+    filesOnly = false,
+  } = options;
+
   const config = await loadAriadneConfig(cwd);
   const relPaths = await fg(config.update.include, {
     cwd,
@@ -67,12 +113,19 @@ export async function runAudit(
       );
       const registryExists = fs.existsSync(regFile);
       let purposeLooksEmpty = true;
+      let body = '';
       if (registryExists) {
-        const body = await fs.readFile(regFile, 'utf8');
+        body = await fs.readFile(regFile, 'utf8');
         purposeLooksEmpty = body.includes(ARIADNE_REGISTRY_EMPTY_PURPOSE);
       } else {
         purposeLooksEmpty = true;
       }
+
+      const currentFingerprint = fingerprintForExportNodes(localNodes);
+      const storedFingerprint = registryExists
+        ? parseStoredFingerprintFromRegistryFile(body)
+        : null;
+      const fpStale = fingerprintStale(storedFingerprint, currentFingerprint);
 
       rows.push({
         source: rel,
@@ -84,8 +137,21 @@ export async function runAudit(
         registryExists,
         sourceHasJSDoc: hasJSDoc,
         purposeLooksEmpty,
+        currentFingerprint,
+        storedFingerprint,
+        fingerprintStale: fpStale,
       });
     }
+  }
+
+  const displayRows = computeDisplayRows(rows, issuesOnly, staleOnly);
+
+  if (filesOnly) {
+    const paths = [...new Set(displayRows.map((r) => r.source))].sort();
+    for (const p of paths) {
+      console.log(p);
+    }
+    return;
   }
 
   const missing = rows.filter((r) => !r.registryExists);
@@ -93,9 +159,12 @@ export async function runAudit(
     (r) => r.registryExists && r.purposeLooksEmpty
   );
   const noJSDocInSource = rows.filter((r) => !r.sourceHasJSDoc);
+  const workQueue = rows.filter(rowNeedsRegistryWork);
+  const staleRows = rows.filter((r) => r.fingerprintStale);
+  const staleOk = rows.length - staleRows.length;
 
   if (options.json) {
-    for (const r of rows) {
+    for (const r of displayRows) {
       console.log(
         JSON.stringify({
           source: r.source,
@@ -104,54 +173,112 @@ export async function runAudit(
           registryExists: r.registryExists,
           sourceHasJSDoc: r.sourceHasJSDoc,
           purposeLooksEmpty: r.purposeLooksEmpty,
+          needsRegistryWork: rowNeedsRegistryWork(r),
+          currentFingerprint: r.currentFingerprint,
+          storedFingerprint: r.storedFingerprint,
+          fingerprintStale: r.fingerprintStale,
         })
       );
     }
     return;
   }
 
-  const lines: string[] = [
+  let tableTitle = '## Rows (all symbols)';
+  if (issuesOnly && staleOnly) {
+    tableTitle =
+      '## Rows (issues OR fingerprint stale: missing / placeholder Purpose / source changed)';
+  } else if (issuesOnly) {
+    tableTitle =
+      '## Rows (issues only: missing registry or placeholder Purpose)';
+  } else if (staleOnly) {
+    tableTitle =
+      '## Rows (fingerprint stale only: source node text changed vs registry)';
+  }
+
+  const out: string[] = [
     '# Ariadne audit',
     '',
     `Scanned with \`.ariadne/config.json\` under: \`${cwd}\``,
     '',
-    '## Summary',
-    '',
-    `- Exports found: **${rows.length}**`,
-    `- Registry file **missing**: **${missing.length}**`,
-    `- Registry exists but **Purpose** still the placeholder \`No JSDoc summary\` / not improved: **${needsNarrative.length}**`,
-    `- Exports with **no JSDoc in source** (add JSDoc or set Purpose via \`update\`): **${noJSDocInSource.length}**`,
-    '',
-    '## Rows (all symbols)',
-    '',
-    '| Source | Symbol | registry .md | exists? | JSDoc in source? | Purpose is placeholder? |',
-    '|--------|--------|--------------|--------:|-----------------:|------------------------:|',
   ];
 
-  for (const r of rows) {
-    lines.push(
-      `| \`${r.source}\` | \`${r.symbol}\` | \`${r.registryPath}\` | ${r.registryExists ? 'yes' : '**no**'} | ${r.sourceHasJSDoc ? 'yes' : '**no**'} | ${!r.registryExists || r.purposeLooksEmpty ? '**yes (needs review)**' : 'no'} |`
+  const showAffected =
+    (issuesOnly || staleOnly) && displayRows.length > 0;
+  if (showAffected) {
+    out.push('---', '', '## Affected source files (deduplicated, for triage)', '');
+    const by = new Map<string, number>();
+    for (const r of displayRows) {
+      by.set(r.source, (by.get(r.source) ?? 0) + 1);
+    }
+    for (const [src, n] of [...by.entries()].sort((a, b) =>
+      a[0].localeCompare(b[0])
+    )) {
+      out.push(`- \`${src}\` **(${n} symbol(s))**`);
+    }
+    out.push('', '---', '');
+  } else if ((issuesOnly || staleOnly) && displayRows.length === 0) {
+    out.push(
+      '---',
+      '',
+      '## Affected source files',
+      '',
+      '*(no rows match the current filters)*',
+      '',
+      '---',
+      ''
     );
   }
 
-  lines.push(
+  if (issuesOnly || staleOnly) {
+    const parts: string[] = [];
+    if (issuesOnly) parts.push('`--issues`');
+    if (staleOnly) parts.push('`--stale`');
+    out.push(
+      `**Mode:** ${parts.join(' and ')} - table lists the filtered subset. Summary below is always for the **full** scan.`,
+      ''
+    );
+  }
+
+  out.push(
+    '## Summary',
+    '',
+    `- Exports in scope: **${rows.length}**`,
+    `- **Fingerprint stale** (missing/mismatched \`source_fingerprint\` vs current source nodes): **${staleRows.length}**`,
+    `- **Fingerprint in sync**: **${staleOk}**`,
+    `- **Needs registry work** (missing file or placeholder Purpose): **${workQueue.length}**`,
+    `- registry file **missing**: **${missing.length}**`,
+    `- registry exists but **Purpose** is still placeholder: **${needsNarrative.length}**`,
+    `- Exports with **no JSDoc in source**: **${noJSDocInSource.length}** *(not implied by \`--issues\`; use full table or JSON to triage)*`,
+    '',
+    '**Flags:** `ariadne audit` (full table); `--issues` (Purpose/missing); `--stale` (source drift); both together = **OR** filter; `--files` = one source path per line from the filtered set; `--json` with any filter.',
+    '',
+    tableTitle,
+    '',
+    '| Source | Symbol | registry .md | exists? | JSDoc? | Purpose placeholder? | fingerprint stale? |',
+    '|--------|--------|--------------|--------:|-------:|----------------------:|---------------------:|'
+  );
+
+  for (const r of displayRows) {
+    out.push(
+      `| \`${r.source}\` | \`${r.symbol}\` | \`${r.registryPath}\` | ${r.registryExists ? 'yes' : '**no**'} | ${r.sourceHasJSDoc ? 'yes' : '**no**'} | ${!r.registryExists || r.purposeLooksEmpty ? '**yes**' : 'no'} | ${r.fingerprintStale ? '**yes**' : 'no'} |`
+    );
+  }
+
+  out.push(
     '',
     '---',
     '',
     '## One-shot task for the Agent (copy below)',
     '',
     '```text',
-    'You are helping with an Ariadne registry. The table above is authoritative.',
+    'You are helping with an Ariadne registry. Use the table above (respect any `--issues` / `--stale` filter).',
     '',
-    '1. For every row with registry **missing** or **Purpose is placeholder = yes (needs review)**:',
-    '   - Open the **Source** file, read the export, and write a 1–3 sentence English **Purpose** per the contract in .cursor/rules/ariadne.mdc.',
-    '2. For each, run:  ariadne update "<Source path>" "<Purpose>"',
-    '   Or add JSDoc on the export in source, then:  ariadne update "<Source path>"  (no literal purpose) so the CLI takes JSDoc.',
-    '3. Prefer fixing **Source** with JSDoc for symbols that are stable APIs.',
-    '4. Do not run ariadne sync to replace this workflow unless the user only wants a mechanical skeleton.',
+    '1. Rows with **fingerprint stale = yes**: re-read the **Source** export in the repo; update Purpose / Contract if the behavior changed; then run `ariadne update "<Source path>"` so `source_fingerprint` is refreshed.',
+    '2. Rows with **missing registry** or **Purpose placeholder**: write 1-3 sentence English Purpose (or JSDoc on the export), then `ariadne update "<Source path>"`.',
+    '3. Prefer JSDoc on stable APIs. Do not rely on `ariadne sync` alone for narrative quality.',
     '```',
     ''
   );
 
-  console.log(lines.join('\n'));
+  console.log(out.join('\n'));
 }

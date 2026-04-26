@@ -10,13 +10,13 @@ description: >-
 
 ## Why
 
-Exports that others can import should have a **locatable** entry under `.ariadne/registry/` (one symbol per file, per `ariadne update` / `ariadne sync` rules in the project). The CLI does not call an LLM; the agent authors **Purpose** and keeps entries aligned with source.
+Exports that others can import should have a **locatable** entry under `.ariadne/registry/` (one **export** per registry `.md`, per `ariadne update` / `ariadne sync` rules in the project). The CLI does not call an LLM; the agent authors **Purpose** and keeps entries aligned with source.
 
 ## How the registry is meant to evolve
 
 Ariadne is designed so the registry is often **incomplete or placeholder-heavy** at first (signatures and JSDoc/placeholders, not polished prose). Treat that as **normal**: the machine side gives you a **worklist**; the agent (or human) **reads the real source** and tightens each entry over time.
 
-- **`ariadne audit`**: use this for a **one-shot triage**—it lists exports vs. registry files, **gaps**, and **placeholder Purposes**, and prints a **copy-paste block** for a full pass. That output is the dirty backlog: work through it **incrementally** with `update` after reading each file.
+- **`ariadne audit`**: **full reconciling pass** for everything in `include`/`exclude`—**one table row per local export** (source + symbol + registry + flags including **fingerprint stale** when `source_fingerprint` disagrees with the current AST node text). **`ariadne audit --stale`** narrows to symbols whose **source changed** since the last `update` (or missing fingerprint). **`ariadne audit --issues`** narrows to **missing** registry files or **placeholder** Purpose. **`--issues` + `--stale`** uses a **union** filter. **`ariadne audit --files --stale`** (or with `--issues`) prints **one source path per line** so you know which `.ts` files to open next. Use **`--json`** for scripting.
 - **`ariadne sync`**: batch re-index; good for **cold start**, **CI skeletons**, or a deliberate full re-index when you **accept** placeholder-level text and will **refine** Purposes afterward. It is **not** a substitute for reading code and writing a good Purpose.
 - **Per-file `ariadne update`**: the default **quality** path after you have read the source and can pass a 1–3 sentence Purpose (or good JSDoc in source).
 
@@ -34,7 +34,7 @@ Ariadne is designed so the registry is often **incomplete or placeholder-heavy**
    - `npx @koncrate/ariadne-cli update "<relative-or-absolute-path-to-.ts>"`  
    - Or with an explicit purpose: `npx @koncrate/ariadne-cli update "<path>" "<Purpose text>"`  
    - If `ariadne` is on PATH: `ariadne update "<path>"` (same args).
-4. **Whole-repo triage (optional):** `npx @koncrate/ariadne-cli audit` (or `ariadne audit`); add `--json` for scripts. Use the report to pick the next file to read and `update`—do not assume one command will rewrite every Purpose with agent quality.
+4. **When the user asks to “update the registry” repo-wide:** from project root run `npx @koncrate/ariadne-cli audit --files --stale` (and/or `--issues`) to get **N source paths**; for **each path**, `read` the file + relevant `.ariadne/registry/*.md`, fix Purpose / JSDoc as needed, then **`npx @koncrate/ariadne-cli update "<path>"`** once per file to refresh all entries and `source_fingerprint`. Optionally run a full `audit` afterward to verify counts.
 
 ## Do not
 
