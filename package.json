@@ -3,8 +3,11 @@
   "version": "1.0.3",
   "description": "Daedalus AI OS Middleware",
   "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
   "bin": {
-    "ariadne": "./dist/index.js"
+    "ariadne": "dist/index.js"
   },
   "scripts": {
     "build": "tsup src/index.ts --format cjs --clean --publicDir templates",
