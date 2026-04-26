@@ -1,0 +1,29 @@
+{
+  "name": "ariadne-cli",
+  "version": "1.0.0",
+  "description": "Daedalus AI OS Middleware",
+  "main": "dist/index.js",
+  "bin": {
+    "ariadne": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs --clean --publicDir templates",
+    "dev": "tsup src/index.ts --watch"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "commander": "^14.0.3",
+    "fs-extra": "^11.3.4",
+    "ts-morph": "^28.0.0"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^25.6.0",
+    "ts-node": "^10.9.2",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3"
+  }
+}
